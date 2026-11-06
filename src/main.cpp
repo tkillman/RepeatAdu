@@ -298,6 +298,7 @@ class CommandCallbacks : public BLECharacteristicCallbacks
   void onWrite(BLECharacteristic *pCharacteristic) override
   {
     String rxValue = pCharacteristic->getValue().c_str();
+    Serial.printf("\n[BLE RX RAW] %s (len: %d)\n", rxValue.c_str(), rxValue.length());
     if (rxValue.length() > 0)
     {
       processCommand(rxValue);
@@ -317,11 +318,12 @@ void initBLE()
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  // 1. 명령 수신 Characteristic (Write / Read)
+  // 1. 명령 수신 Characteristic (Write / Read / Write_NR)
   pCmdCharacteristic = pService->createCharacteristic(
       CHARACTERISTIC_UUID_CMD,
       BLECharacteristic::PROPERTY_READ |
-          BLECharacteristic::PROPERTY_WRITE);
+          BLECharacteristic::PROPERTY_WRITE |
+          BLECharacteristic::PROPERTY_WRITE_NR);
   pCmdCharacteristic->setCallbacks(new CommandCallbacks());
 
   // 2. 상태 알림 Characteristic (Read / Notify)

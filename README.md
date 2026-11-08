@@ -48,6 +48,16 @@ Flutter 컴패니언 앱(`repeat_keyboard`)과 BLE를 통해 무선으로 연동
 - Flutter 앱에서 `START` 전송 후 스마트폰이 절전 모드로 진입하거나 BLE 연결이 끊어져도, **ESP32-C3는 멈추지 않고 설정된 시간(`totalMinutes`) 동안 작업을 끝까지 유지**합니다.
 - 백그라운드에서 상시 재광고(Re-advertising)를 수행하므로 사용자가 앱을 다시 열면 즉시 재연결되어 진행 상황이 실시간 동기화됩니다.
 
+### 랜덤 반복 주기
+
+앱은 `START` 명령에 `intervalMinSec`, `intervalMaxSec`를 보낼 수 있습니다. 기기는 첫 타건을 즉시 수행한 뒤, 매 타건마다 이 범위에서 다음 전체 주기를 새로 선택합니다.
+
+```json
+{"cmd":"START","totalMin":30,"intervalMinSec":5,"intervalMaxSec":10,"holdSec":0.2}
+```
+
+기존 앱이 보내는 `intervalSec`만 있는 명령과 USB-C 시리얼의 `START 30 5.0 0.2` 형식은 계속 지원하며, 이 경우 최소·최대가 같은 고정 주기로 동작합니다.
+
 ---
 
 ## 💻 USB-C 시리얼 CLI 테스트

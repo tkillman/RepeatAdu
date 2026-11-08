@@ -33,7 +33,8 @@ enum ClickerState
 struct ClickerConfig
 {
   float totalMinutes = 30.0f;   // 총 동작 시간 (분)
-  float intervalSeconds = 5.0f; // 타건 간격 (초)
+  float intervalMinSeconds = 5.0f; // 타건 간격 최소값 (초)
+  float intervalMaxSeconds = 5.0f; // 타건 간격 최대값 (초)
   float holdSeconds = 0.2f;     // 키 누름 유지 시간 (초)
   int pressAngle = 45;          // 타건(누름) 각도 (도)
   int releaseAngle = 0;         // 대기(복귀) 각도 (도)
@@ -58,6 +59,14 @@ unsigned long totalDurationMs = 0;  // 총 지속 시간 (ms)
 unsigned long stateTimerMs = 0;     // 현재 상태 진입 시점 (ms)
 unsigned long lastTelemetryMs = 0;  // 마지막 BLE/시리얼 알림 전송 시점
 uint32_t executedCount = 0;         // 타건 실행 횟수
+unsigned long selectedIntervalMs = 5000; // 다음 타건까지 선택된 전체 주기
+
+unsigned long selectNextIntervalMs()
+{
+  const unsigned long minMs = (unsigned long)(config.intervalMinSeconds * 1000.0f);
+  const unsigned long maxMs = (unsigned long)(config.intervalMaxSeconds * 1000.0f);
+  return (minMs == maxMs) ? minMs : random(minMs, maxMs + 1);
+}
 
 // ==========================================
 // 4. 서보 제어 유틸리티 (지터 및 발열 방지)
@@ -187,10 +196,13 @@ void sendTelemetry(bool force = false)
 // ==========================================
 // 6. 오토클리커 제어 함수 (시작 / 정지)
 // ==========================================
-void startAutoclicker(float totalMin, float intervalSec, float holdSec, int pressAng = 45, int relAng = 0)
+void startAutoclicker(float totalMin, float intervalMinSec, float intervalMaxSec, float holdSec, int pressAng = 45, int relAng = 0)
 {
   config.totalMinutes = (totalMin > 0) ? totalMin : 30.0f;
-  config.intervalSeconds = (intervalSec > 0.1f) ? intervalSec : 5.0f;
+  config.intervalMinSeconds = (intervalMinSec > 0.1f) ? intervalMinSec : 5.0f;
+  config.intervalMaxSeconds = (intervalMaxSec >= config.intervalMinSeconds)
+                                  ? intervalMaxSec
+                                  : config.intervalMinSeconds;
   config.holdSeconds = (holdSec > 0.05f) ? holdSec : 0.2f;
   config.pressAngle = constrain(pressAng, 0, 180);
   config.releaseAngle = constrain(relAng, 0, 180);
@@ -199,8 +211,8 @@ void startAutoclicker(float totalMin, float intervalSec, float holdSec, int pres
   totalStartTimeMs = millis();
   executedCount = 0;
 
-  Serial.printf("\n>>> Autoclicker Started! Total: %.1fm, Interval: %.2fs, Hold: %.2fs, Angle: %d -> %d\n",
-                config.totalMinutes, config.intervalSeconds, config.holdSeconds,
+  Serial.printf("\n>>> Autoclicker Started! Total: %.1fm, Interval: %.2f~%.2fs, Hold: %.2fs, Angle: %d -> %d\n",
+                config.totalMinutes, config.intervalMinSeconds, config.intervalMaxSeconds, config.holdSeconds,
                 config.releaseAngle, config.pressAngle);
 
   // 즉시 첫 타건 시작
@@ -243,12 +255,14 @@ void processCommand(const String &cmdStr)
   if (strcasecmp(cmd, "START") == 0)
   {
     float totalMin = doc["totalMin"] | doc["totalMinutes"] | config.totalMinutes;
-    float intervalSec = doc["intervalSec"] | doc["intervalSeconds"] | config.intervalSeconds;
+    float intervalSec = doc["intervalSec"] | doc["intervalSeconds"] | config.intervalMinSeconds;
+    float intervalMinSec = doc["intervalMinSec"] | intervalSec;
+    float intervalMaxSec = doc["intervalMaxSec"] | intervalSec;
     float holdSec = doc["holdSec"] | doc["holdSeconds"] | config.holdSeconds;
     int pressAngle = doc["pressAngle"] | config.pressAngle;
     int releaseAngle = doc["releaseAngle"] | config.releaseAngle;
 
-    startAutoclicker(totalMin, intervalSec, holdSec, pressAngle, releaseAngle);
+    startAutoclicker(totalMin, intervalMinSec, intervalMaxSec, holdSec, pressAngle, releaseAngle);
   }
   else if (strcasecmp(cmd, "STOP") == 0)
   {
@@ -377,7 +391,7 @@ void processSerialCli()
   }
   else if (line.startsWith("START") || line.startsWith("start"))
   {
-    float t = config.totalMinutes, i = config.intervalSeconds, h = config.holdSeconds;
+    float t = config.totalMinutes, i = config.intervalMinSeconds, h = config.holdSeconds;
     int firstSpace = line.indexOf(' ');
     if (firstSpace > 0)
     {
@@ -402,7 +416,7 @@ void processSerialCli()
         t = params.toFloat();
       }
     }
-    startAutoclicker(t, i, h, config.pressAngle, config.releaseAngle);
+    startAutoclicker(t, i, i, h, config.pressAngle, config.releaseAngle);
   }
   else if (line.equalsIgnoreCase("STOP"))
   {
@@ -471,16 +485,17 @@ void loopFSM()
         keyServo.detach(); // 신호 차단으로 지터 및 발열 완벽 방지
       }
       stateTimerMs = now;
+      selectedIntervalMs = selectNextIntervalMs();
       currentState = STATE_WAIT_INTERVAL;
     }
     break;
 
   case STATE_WAIT_INTERVAL:
   {
-    // 다음 타건 주기(intervalSeconds) 대기
+    // 선택된 다음 타건 주기 대기
     // 주기 계산: 누름 시작부터 다음 누름 시작까지의 간격
     unsigned long elapsedInInterval = now - stateTimerMs;
-    unsigned long waitTargetMs = (unsigned long)(config.intervalSeconds * 1000.0f);
+    unsigned long waitTargetMs = selectedIntervalMs;
 
     // 누름 유지 시간 및 릴리즈 지연 시간을 차감한 나머지 시간 대기
     if (waitTargetMs > (unsigned long)((config.holdSeconds * 1000.0f) + 150))
@@ -502,7 +517,7 @@ void loopFSM()
       unsigned long elapsedSec = (now - totalStartTimeMs) / 1000;
       unsigned long remainSec = (totalDurationMs > (now - totalStartTimeMs)) ? (totalDurationMs - (now - totalStartTimeMs)) / 1000 : 0;
       Serial.printf("\n👉 [CLICK #%lu] 키 누름! (주기: %.2f초, 경과: %lu초, 잔여: %lu초)\n", 
-                    (unsigned long)executedCount, config.intervalSeconds, elapsedSec, remainSec);
+                    (unsigned long)executedCount, selectedIntervalMs / 1000.0f, elapsedSec, remainSec);
     }
     break;
   }
@@ -518,6 +533,7 @@ void setup()
   digitalWrite(LED_PIN, HIGH); // 초기 LED OFF (Active Low 기준)
 
   Serial.begin(115200);
+  randomSeed(esp_random());
   delay(1000); // SuperMini Native USB CDC 포트 안정화 대기
 
   Serial.println("\n=============================================");

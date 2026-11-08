@@ -17,7 +17,7 @@ class AutoclickerEngine
 {
 public:
   void begin();
-  void start(float, float, float, float, int = 45, int = 0);
+  void start(float, float, float, float, int = 75, int = 0);
   void stop(const char *reason = "User Request");
   void reset();
   void calibrate(int);

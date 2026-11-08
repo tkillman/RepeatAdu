@@ -17,9 +17,14 @@ class FirmwareArchitectureTest(unittest.TestCase):
         ble_service = (ROOT / 'src' / 'ble_service.cpp').read_text(encoding='utf-8')
         engine = (ROOT / 'src' / 'autoclicker_engine.cpp').read_text(encoding='utf-8')
 
-        self.assertIn('strcasecmp(cmd,"RESET")', ble_service)
+        self.assertIn('strcasecmp(cmd, "RESET")', ble_service)
         self.assertIn('engine_->reset()', ble_service)
         self.assertIn('void AutoclickerEngine::reset()', engine)
+
+    def test_default_press_angle_is_75_degrees(self):
+        header = (ROOT / 'src' / 'autoclicker_engine.h').read_text(encoding='utf-8')
+
+        self.assertIn('pressAngle = 75', header)
 
 
 if __name__ == '__main__':

@@ -7,7 +7,10 @@ ROOT = Path(__file__).parents[1] / 'src'
 
 class RandomIntervalFirmwareContractTest(unittest.TestCase):
     def test_firmware_accepts_a_minimum_and_maximum_interval(self):
-        source = (ROOT / 'ble_service.cpp').read_text(encoding='utf-8')
+        source = (
+            (ROOT / 'ble_service.cpp').read_text(encoding='utf-8')
+            + (ROOT / 'autoclicker_engine.h').read_text(encoding='utf-8')
+        )
 
         self.assertIn('intervalMinSec', source)
         self.assertIn('intervalMaxSec', source)

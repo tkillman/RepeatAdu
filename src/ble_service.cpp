@@ -4,10 +4,94 @@
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include "autoclicker_engine.h"
-namespace {constexpr char serviceUuid[]="4fafc201-1fb5-459e-8fcc-c5c9c331914b",commandUuid[]="beb5483e-36e1-4688-b7f5-ea07361b26a8",statusUuid[]="1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e";BleService* instance;BLECharacteristic* status;
-class ServerCallbacks:public BLEServerCallbacks{void onConnect(BLEServer*)override{instance->setConnected(true);instance->processCommand("STATUS");}void onDisconnect(BLEServer* s)override{instance->setConnected(false);s->startAdvertising();}};
-class CommandCallbacks:public BLECharacteristicCallbacks{void onWrite(BLECharacteristic* c)override{String v=c->getValue().c_str();if(!v.isEmpty())instance->processCommand(v);}};}
-void BleService::begin(AutoclickerEngine& engine){engine_=&engine;instance=this;BLEDevice::init("RepeatAdu_Clicker");auto server=BLEDevice::createServer();server->setCallbacks(new ServerCallbacks());auto service=server->createService(serviceUuid);auto command=service->createCharacteristic(commandUuid,BLECharacteristic::PROPERTY_READ|BLECharacteristic::PROPERTY_WRITE|BLECharacteristic::PROPERTY_WRITE_NR);command->setCallbacks(new CommandCallbacks());status=service->createCharacteristic(statusUuid,BLECharacteristic::PROPERTY_READ|BLECharacteristic::PROPERTY_NOTIFY);service->start();auto ad=BLEDevice::getAdvertising();ad->addServiceUUID(serviceUuid);ad->setScanResponse(true);BLEDevice::startAdvertising();}
-void BleService::processCommand(const String& value){if(value.equalsIgnoreCase("STATUS")){telemetry(true);return;}JsonDocument doc;if(deserializeJson(doc,value))return;const char* cmd=doc["cmd"]|"";if(strcasecmp(cmd,"START")==0){const auto& c=engine_->config();float fixed=doc["intervalSec"]|doc["intervalSeconds"]|c.intervalMinSeconds;engine_->start(doc["totalMin"]|doc["totalMinutes"]|c.totalMinutes,doc["intervalMinSec"]|fixed,doc["intervalMaxSec"]|fixed,doc["holdSec"]|doc["holdSeconds"]|c.holdSeconds,doc["pressAngle"]|c.pressAngle,doc["releaseAngle"]|c.releaseAngle);}else if(strcasecmp(cmd,"STOP")==0)engine_->stop("Remote STOP Command");else if(strcasecmp(cmd,"RESET")==0)engine_->reset();else if(strcasecmp(cmd,"CALIBRATE")==0)engine_->calibrate(doc["angle"]|engine_->config().pressAngle);telemetry(true);}
-void BleService::tick(){telemetry();}
-void BleService::telemetry(bool force){auto now=millis();if(!force&&now-last_<1000)return;last_=now;JsonDocument doc;doc["state"]=clickerStateName(engine_->state());doc["remainingSec"]=engine_->remainingSeconds();doc["executedCount"]=engine_->executedCount();doc["elapsedSec"]=engine_->elapsedSeconds();doc["bleConnected"]=connected_;String json;serializeJson(doc,json);if(connected_&&status){status->setValue(json.c_str());status->notify();}}
+namespace
+{
+    constexpr char serviceUuid[] = "4fafc201-1fb5-459e-8fcc-c5c9c331914b", commandUuid[] = "beb5483e-36e1-4688-b7f5-ea07361b26a8", statusUuid[] = "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e";
+    BleService *instance;
+    BLECharacteristic *status;
+    class ServerCallbacks : public BLEServerCallbacks
+    {
+        void onConnect(BLEServer *) override
+        {
+            instance->setConnected(true);
+            instance->processCommand("STATUS");
+        }
+        void onDisconnect(BLEServer *s) override
+        {
+            instance->setConnected(false);
+            s->startAdvertising();
+        }
+    };
+    class CommandCallbacks : public BLECharacteristicCallbacks
+    {
+        void onWrite(BLECharacteristic *c) override
+        {
+            String v = c->getValue().c_str();
+            if (!v.isEmpty())
+                instance->processCommand(v);
+        }
+    };
+}
+void BleService::begin(AutoclickerEngine &engine)
+{
+    engine_ = &engine;
+    instance = this;
+    BLEDevice::init("RepeatAdu_Clicker");
+    auto server = BLEDevice::createServer();
+    server->setCallbacks(new ServerCallbacks());
+    auto service = server->createService(serviceUuid);
+    auto command = service->createCharacteristic(commandUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+    command->setCallbacks(new CommandCallbacks());
+    status = service->createCharacteristic(statusUuid, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
+    service->start();
+    auto ad = BLEDevice::getAdvertising();
+    ad->addServiceUUID(serviceUuid);
+    ad->setScanResponse(true);
+    BLEDevice::startAdvertising();
+}
+void BleService::processCommand(const String &value)
+{
+    if (value.equalsIgnoreCase("STATUS"))
+    {
+        telemetry(true);
+        return;
+    }
+    JsonDocument doc;
+    if (deserializeJson(doc, value))
+        return;
+    const char *cmd = doc["cmd"] | "";
+    if (strcasecmp(cmd, "START") == 0)
+    {
+        const auto &c = engine_->config();
+        float fixed = doc["intervalSec"] | doc["intervalSeconds"] | c.intervalMinSeconds;
+        engine_->start(doc["totalMin"] | doc["totalMinutes"] | c.totalMinutes, doc["intervalMinSec"] | fixed, doc["intervalMaxSec"] | fixed, doc["holdSec"] | doc["holdSeconds"] | c.holdSeconds, doc["pressAngle"] | c.pressAngle, doc["releaseAngle"] | c.releaseAngle);
+    }
+    else if (strcasecmp(cmd, "STOP") == 0)
+        engine_->stop("Remote STOP Command");
+    else if (strcasecmp(cmd, "RESET") == 0)
+        engine_->reset();
+    else if (strcasecmp(cmd, "CALIBRATE") == 0)
+        engine_->calibrate(doc["angle"] | engine_->config().pressAngle);
+    telemetry(true);
+}
+void BleService::tick() { telemetry(); }
+void BleService::telemetry(bool force)
+{
+    auto now = millis();
+    if (!force && now - last_ < 1000)
+        return;
+    last_ = now;
+    JsonDocument doc;
+    doc["state"] = clickerStateName(engine_->state());
+    doc["remainingSec"] = engine_->remainingSeconds();
+    doc["executedCount"] = engine_->executedCount();
+    doc["elapsedSec"] = engine_->elapsedSeconds();
+    doc["bleConnected"] = connected_;
+    String json;
+    serializeJson(doc, json);
+    if (connected_ && status)
+    {
+        status->setValue(json.c_str());
+        status->notify();
+    }
+}

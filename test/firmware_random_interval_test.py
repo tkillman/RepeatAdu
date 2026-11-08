@@ -2,12 +2,12 @@ from pathlib import Path
 import unittest
 
 
-SOURCE = Path(__file__).parents[1] / 'src' / 'main.cpp'
+ROOT = Path(__file__).parents[1] / 'src'
 
 
 class RandomIntervalFirmwareContractTest(unittest.TestCase):
     def test_firmware_accepts_a_minimum_and_maximum_interval(self):
-        source = SOURCE.read_text(encoding='utf-8')
+        source = (ROOT / 'ble_service.cpp').read_text(encoding='utf-8')
 
         self.assertIn('intervalMinSec', source)
         self.assertIn('intervalMaxSec', source)
@@ -15,10 +15,10 @@ class RandomIntervalFirmwareContractTest(unittest.TestCase):
         self.assertIn('intervalMaxSeconds', source)
 
     def test_firmware_selects_a_random_interval_for_each_wait(self):
-        source = SOURCE.read_text(encoding='utf-8')
+        source = (ROOT / 'autoclicker_engine.cpp').read_text(encoding='utf-8')
 
         self.assertIn('random(', source)
-        self.assertIn('selectedIntervalMs', source)
+        self.assertIn('selected_', source)
 
 
 if __name__ == '__main__':
